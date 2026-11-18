@@ -1,0 +1,37 @@
+{
+  "name": "topsell-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack -p 3001",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3001}",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@radix-ui/react-label": "^2.1.2",
+    "@radix-ui/react-separator": "^1.1.2",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@remixicon/react": "^4.9.0",
+    "@tailwindcss/postcss": "^4.3.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.474.0",
+    "motion": "^12.42.2",
+    "next": "^16.0.7",
+    "react": "^19.2.1",
+    "react-aria-components": "^1.22.1",
+    "react-dom": "^19.2.1",
+    "tailwind-merge": "^3.0.1",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint-config-next": "^16.0.7",
+    "postcss": "^8",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3"
+  }
+}
