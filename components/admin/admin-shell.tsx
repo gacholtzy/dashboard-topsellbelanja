@@ -16,7 +16,6 @@ import {
     RiMenuLine,
     RiSettings3Line,
     RiShoppingBag3Line,
-    RiStore2Line,
 } from '@remixicon/react'
 import { Button } from '@/components/base/buttons/button'
 import { Chip } from '@/components/base/badges/chip'
@@ -106,14 +105,10 @@ export function AdminShell({
         <div className="flex h-full flex-col">
             {/* Brand */}
             <div className="flex items-center justify-between gap-2 px-4 py-4">
-                <div className="flex items-center gap-2.5">
-                    <div className="flex size-9 items-center justify-center rounded-xl bg-accent-600 text-white">
-                        <RiStore2Line className="size-5" aria-hidden />
-                    </div>
-                    <div>
-                        <p className="text-body-medium font-semibold text-text-primary">Topsell Admin</p>
-                        <p className="text-caption-1-regular text-text-tertiary">Panel Penjualan</p>
-                    </div>
+                <div className="min-w-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/images/logo.webp" alt="Topsell Belanja" className="h-7 w-auto" />
+                    <p className="mt-1 text-caption-1-regular text-text-tertiary">Panel Penjualan</p>
                 </div>
                 <div className="lg:hidden">
                     <CloseButton aria-label="Tutup menu" onClick={() => setMobileOpen(false)} />

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { DirectionProvider } from "@/components/foundations/direction/direction";
 import { Toaster } from "@/components/ui/toaster";
 
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" dir="ltr" className={jakarta.variable}>
+    <html lang="id" dir="ltr" className={inter.variable}>
       <body className="bg-background-full font-sans text-text-primary antialiased">
         <DirectionProvider locale="id-ID">
           {children}

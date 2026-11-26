@@ -85,8 +85,8 @@ const DialogOverlay = () => null
 
 const DialogContent = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { "aria-label"?: string; hideClose?: boolean; dismissable?: boolean }
->(({ className, children, hideClose, dismissable = true, "aria-label": ariaLabel }, _ref) => {
+  React.HTMLAttributes<HTMLDivElement> & { "aria-label"?: string; hideClose?: boolean; dismissable?: boolean; size?: "sm" | "md" | "lg" | "xl" }
+>(({ className, children, hideClose, dismissable = true, size = "md", "aria-label": ariaLabel }, _ref) => {
   const { open, setOpen } = useDialogCtx()
   const wide = useIsWide()
   const body = (
@@ -98,7 +98,7 @@ const DialogContent = React.forwardRef<
     </div>
   )
   return wide ? (
-    <Modal isOpen={open} onOpenChange={setOpen} size="md" aria-label={ariaLabel} isDismissable={dismissable} isKeyboardDismissDisabled={!dismissable}>
+    <Modal isOpen={open} onOpenChange={setOpen} size={size} aria-label={ariaLabel} isDismissable={dismissable} isKeyboardDismissDisabled={!dismissable}>
       {body}
     </Modal>
   ) : (

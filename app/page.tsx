@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { RiArrowLeftLine, RiLockLine, RiStore2Line } from '@remixicon/react'
+import { RiArrowLeftLine, RiLockLine } from '@remixicon/react'
 import { Button } from '@/components/base/buttons/button'
 import { Input } from '@/components/base/input/input'
 import { AdminShell, type AdminSectionKey } from '@/components/admin/admin-shell'
@@ -92,16 +92,12 @@ export default function AdminPage() {
         return (
             <div className="flex min-h-screen items-center justify-center bg-background-secondary-default/40 px-4 py-12">
                 <div className="w-full max-w-md rounded-3xl border border-border-button-default bg-background-full p-6 sm:p-8">
-                    <div className="mb-6 flex items-center gap-3">
-                        <div className="flex size-11 items-center justify-center rounded-2xl bg-accent-600 text-white">
-                            <RiStore2Line className="size-6" aria-hidden />
-                        </div>
-                        <div>
-                            <h1 className="text-title-2-semibold text-text-primary">Topsell Admin</h1>
-                            <p className="text-caption-1-regular text-text-secondary">
-                                Dashboard pengelolaan penjualan & checkout
-                            </p>
-                        </div>
+                    <div className="mb-6 space-y-1.5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/images/logo.webp" alt="Topsell Belanja" className="h-8 w-auto" />
+                        <p className="text-caption-1-regular text-text-secondary">
+                            Dashboard pengelolaan penjualan &amp; checkout
+                        </p>
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-4">

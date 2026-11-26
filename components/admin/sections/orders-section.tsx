@@ -3,18 +3,20 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
     RiCheckboxCircleLine,
+    RiDeleteBinLine,
     RiEditLine,
     RiRefreshLine,
     RiTruckLine,
 } from '@remixicon/react'
 import { Button } from '@/components/base/buttons/button'
+import { Checkbox } from '@/components/base/checkbox/checkbox'
+import { BulkActionBar, ConfirmDialog, type BulkResult } from '@/components/admin/bulk-actions'
 import { Chip, type ChipColor } from '@/components/base/badges/chip'
-import { Divider } from '@/components/base/divider/divider'
 import { Input } from '@/components/base/input/input'
 import { SearchField } from '@/components/base/search-field/search-field'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
 import { Tab, TabList, Tabs } from '@/components/base/tabs/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { PaginationComponent } from '@/components/PaginationComponent'
 import { useToast } from '@/hooks/use-toast'
 import { adminFetch, formatRupiah, type AdminOrder } from '@/lib/admin-api'
@@ -34,6 +36,23 @@ const STATUS_META: Record<string, { label: string; color: ChipColor }> = {
     sent: { label: 'Dikirim', color: 'cyan' },
     complete: { label: 'Selesai', color: 'lime' },
     expired: { label: 'Kadaluarsa', color: 'neutral' },
+}
+
+function DetailRow({
+    label,
+    children,
+    strong,
+}: {
+    label: string
+    children: React.ReactNode
+    strong?: boolean
+}) {
+    return (
+        <div className="flex items-start justify-between gap-4 py-0.5">
+            <dt className="shrink-0 text-text-secondary">{label}</dt>
+            <dd className={`min-w-0 text-end text-text-primary ${strong ? 'font-semibold' : ''}`}>{children}</dd>
+        </div>
+    )
 }
 
 export function OrdersSection({
@@ -57,6 +76,61 @@ export function OrdersSection({
     const [courierName, setCourierName] = useState('')
     const [trackingNumber, setTrackingNumber] = useState('')
     const [saving, setSaving] = useState(false)
+
+    // Aksi massal
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [bulkStatus, setBulkStatus] = useState('proses')
+    const [bulkBusy, setBulkBusy] = useState(false)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+
+    // Pilihan hanya berlaku untuk daftar yang sedang tampil.
+    useEffect(() => {
+        setSelected(new Set())
+    }, [status, page, search])
+
+    const allSelected = orders.length > 0 && orders.every((o) => selected.has(o.invoice))
+    const someSelected = selected.size > 0 && !allSelected
+
+    const toggleAll = (checked: boolean) =>
+        setSelected(checked ? new Set(orders.map((o) => o.invoice)) : new Set())
+
+    const toggleOne = (invoice: string, checked: boolean) =>
+        setSelected((prev) => {
+            const next = new Set(prev)
+            if (checked) next.add(invoice)
+            else next.delete(invoice)
+            return next
+        })
+
+    const runBulk = async (body: Record<string, unknown>, doneTitle: string) => {
+        setBulkBusy(true)
+        try {
+            const res = await adminFetch<BulkResult>('/admin/orders/bulk', {
+                method: 'POST',
+                body: JSON.stringify({ invoices: [...selected], ...body }),
+            })
+            const failedCount = res.failed?.length ?? 0
+            toast({
+                title: `${doneTitle}: ${res.affected} pesanan`,
+                description: failedCount
+                    ? `${failedCount} gagal: ${res.failed.map((f) => `${f.invoice} (${f.message})`).join(', ')}`
+                    : undefined,
+                variant: failedCount ? 'destructive' : undefined,
+            })
+            setSelected(new Set())
+            setConfirmDelete(false)
+            load()
+            onOrdersChanged?.()
+        } catch (err) {
+            toast({
+                title: 'Aksi massal gagal',
+                description: err instanceof Error ? err.message : 'Terjadi kesalahan',
+                variant: 'destructive',
+            })
+        } finally {
+            setBulkBusy(false)
+        }
+    }
 
     const load = useCallback(async () => {
         setLoading(true)
@@ -165,6 +239,48 @@ export function OrdersSection({
                 </TabList>
             </Tabs>
 
+            <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+                <select
+                    aria-label="Status baru untuk pesanan terpilih"
+                    value={bulkStatus}
+                    onChange={(e) => setBulkStatus(e.target.value)}
+                    className="h-8 rounded-lg border border-border-button-default bg-background-full px-2 text-body-regular text-text-primary"
+                >
+                    {ORDER_TABS.filter((t) => t.key !== 'all').map((t) => (
+                        <option key={t.key} value={t.key}>
+                            {t.label}
+                        </option>
+                    ))}
+                </select>
+                <Button
+                    variant="primary"
+                    size="small"
+                    disabled={bulkBusy}
+                    onClick={() => runBulk({ action: 'status', status: bulkStatus }, 'Status diubah')}
+                >
+                    {bulkBusy ? 'Memproses...' : 'Ubah status'}
+                </Button>
+                <Button
+                    variant="danger"
+                    size="small"
+                    leadingIcon={RiDeleteBinLine}
+                    disabled={bulkBusy}
+                    onClick={() => setConfirmDelete(true)}
+                >
+                    Hapus
+                </Button>
+            </BulkActionBar>
+
+            <ConfirmDialog
+                open={confirmDelete}
+                title={`Hapus ${selected.size} pesanan?`}
+                description="Pesanan yang dipilih dihapus permanen dari database dan tidak bisa dikembalikan. Pesanan yang sudah dikirim ke Biteship tidak ikut dibatalkan di sana."
+                confirmLabel="Ya, hapus"
+                loading={bulkBusy}
+                onConfirm={() => runBulk({ action: 'delete' }, 'Dihapus')}
+                onCancel={() => setConfirmDelete(false)}
+            />
+
             <section className="overflow-hidden rounded-3xl border border-border-button-default bg-background-full">
                 {loading ? (
                     <div className="space-y-3 p-6" aria-busy="true">
@@ -184,7 +300,15 @@ export function OrdersSection({
                         <table className="w-full text-start text-body-regular">
                             <thead>
                                 <tr className="border-b border-separator-border text-caption-1-semibold text-text-tertiary">
-                                    <th className="px-5 py-3.5 text-start">Invoice & Tanggal</th>
+                                    <th className="w-10 ps-5 py-3.5 text-start">
+                                        <Checkbox
+                                            aria-label="Pilih semua pesanan di halaman ini"
+                                            isSelected={allSelected}
+                                            isIndeterminate={someSelected}
+                                            onChange={toggleAll}
+                                        />
+                                    </th>
+                                    <th className="px-4 py-3.5 text-start">Invoice & Tanggal</th>
                                     <th className="px-4 py-3.5 text-start">Pembeli</th>
                                     <th className="px-4 py-3.5 text-start">Produk & Kirim</th>
                                     <th className="px-4 py-3.5 text-end">Total</th>
@@ -200,7 +324,14 @@ export function OrdersSection({
                                     }
                                     return (
                                         <tr key={order.id} className="hover:bg-background-secondary-hover/60">
-                                            <td className="px-5 py-3.5 align-top">
+                                            <td className="w-10 ps-5 py-3.5 align-top">
+                                                <Checkbox
+                                                    aria-label={`Pilih pesanan ${order.invoice}`}
+                                                    isSelected={selected.has(order.invoice)}
+                                                    onChange={(checked) => toggleOne(order.invoice, checked)}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-3.5 align-top">
                                                 <p className="font-semibold tabular-nums text-text-primary" dir="ltr">
                                                     {order.invoice}
                                                 </p>
@@ -264,52 +395,144 @@ export function OrdersSection({
                 />
             )}
 
-            {/* Manage Order Modal */}
+            {/* Detail & Manage Order Modal */}
             <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-                <DialogContent aria-label="Kelola pesanan">
-                    {editing && (
-                        <form onSubmit={handleSaveStatus} className="space-y-5">
-                            <DialogHeader>
-                                <DialogTitle className="tabular-nums" dir="ltr">
-                                    {editing.invoice}
-                                </DialogTitle>
-                                <DialogDescription>
-                                    Pembeli: {editing.name || '-'} ({editing.phone || '-'})
-                                </DialogDescription>
-                            </DialogHeader>
+                <DialogContent aria-label="Detail pesanan" size="xl">
+                    {editing && (() => {
+                        const isPickup = editing.shipping?.title === 'Ambil di Toko'
+                        const subtotal = editing.products.reduce((s, p) => s + Number(p.price) * p.qty, 0)
+                        const meta = STATUS_META[editing.status] || { label: editing.status, color: 'neutral' as ChipColor }
+                        const shippingLabel = isPickup
+                            ? `Ambil di Toko${editing.area?.name ? ` - ${editing.area.name}` : ''}`
+                            : [
+                                  editing.shipping?.title,
+                                  [editing.courierName, editing.courierServiceName].filter(Boolean).join(' '),
+                              ]
+                                  .filter(Boolean)
+                                  .join(' · ')
 
-                            <div className="space-y-2 rounded-2xl bg-background-secondary-default p-4 text-body-regular">
-                                <p className="text-caption-1-semibold text-text-tertiary">Produk ({editing.products.length})</p>
-                                <ul className="space-y-1.5">
-                                    {editing.products.map((p, idx) => (
-                                        <li key={idx} className="flex justify-between gap-3">
-                                            <span className="text-text-primary">
-                                                {p.name} × {p.qty}
-                                            </span>
-                                            <span className="shrink-0 font-medium tabular-nums text-text-primary">
-                                                {formatRupiah(Number(p.price) * p.qty)}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <Divider className="my-2" />
-                                <div className="flex justify-between font-semibold text-text-primary">
-                                    <span>Total Pembayaran</span>
-                                    <span className="tabular-nums">{formatRupiah(editing.total)}</span>
+                        return (
+                            <form onSubmit={handleSaveStatus} className="space-y-4">
+                                <div className="rounded-2xl bg-accent-600 px-4 py-3 text-center text-title-3-semibold text-white">
+                                    Detail Pesanan
                                 </div>
-                                {editing.address && (
-                                    <p className="pt-1 text-caption-1-regular text-text-secondary">
-                                        Alamat: {editing.address}
-                                    </p>
-                                )}
-                            </div>
 
-                            <div className="space-y-3">
-                                <div>
-                                    <label className="mb-1.5 block text-body-medium text-text-primary">
-                                        Ubah Status Pesanan
-                                    </label>
-                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    {/* Informasi Pesanan */}
+                                    <section className="rounded-2xl bg-background-secondary-default p-4 text-body-regular">
+                                        <h3 className="mb-3 text-center text-body-medium font-semibold text-text-primary">
+                                            Informasi Pesanan
+                                        </h3>
+                                        <dl className="space-y-0.5">
+                                            <DetailRow label="ID Pesanan:">
+                                                <span className="break-all tabular-nums" dir="ltr">#{editing.invoice}</span>
+                                            </DetailRow>
+                                            <DetailRow label="Tanggal Pesanan:">
+                                                {new Date(editing.createdAt).toLocaleDateString('id-ID', {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    year: 'numeric',
+                                                })}
+                                            </DetailRow>
+                                            <DetailRow label="Status:">
+                                                <Chip variant="caption" color={meta.color}>{meta.label}</Chip>
+                                            </DetailRow>
+                                        </dl>
+
+                                        <dl className="mt-4 space-y-3">
+                                            {editing.products.map((p, idx) => (
+                                                <div key={idx} className="space-y-0.5">
+                                                    <DetailRow label="Produk:">
+                                                        {p.name}
+                                                        {(p as { variant?: string }).variant
+                                                            ? ` - ${(p as { variant?: string }).variant}`
+                                                            : ''}
+                                                    </DetailRow>
+                                                    <DetailRow label="Harga:">
+                                                        <span className="tabular-nums">{formatRupiah(Number(p.price))}</span>
+                                                    </DetailRow>
+                                                    <DetailRow label="Qty:">
+                                                        <span className="tabular-nums">{p.qty}</span>
+                                                    </DetailRow>
+                                                </div>
+                                            ))}
+                                        </dl>
+
+                                        <dl className="mt-4 space-y-0.5">
+                                            <DetailRow label="Nama Pembeli:">{editing.name || '-'}</DetailRow>
+                                            <DetailRow label="Alamat:">{isPickup ? '-' : editing.address || '-'}</DetailRow>
+                                            <DetailRow label="No. Telefon:">
+                                                <span className="tabular-nums" dir="ltr">{editing.phone || '-'}</span>
+                                            </DetailRow>
+                                            <DetailRow label="Email:">
+                                                <span className="break-all">{editing.email || '-'}</span>
+                                            </DetailRow>
+                                        </dl>
+                                    </section>
+
+                                    {/* Informasi Pembayaran dan Pengiriman */}
+                                    <section className="rounded-2xl bg-background-secondary-default p-4 text-body-regular">
+                                        <h3 className="mb-3 text-center text-body-medium font-semibold text-text-primary">
+                                            Informasi Pembayaran dan Pengiriman
+                                        </h3>
+                                        <dl className="space-y-0.5">
+                                            <DetailRow label="Metode Pembayaran:">{editing.paymentMethod?.name || '-'}</DetailRow>
+                                            <DetailRow label="Nama Pemilik Rekening:">
+                                                {editing.bankAccountName || 'xxxx xxxx'}
+                                            </DetailRow>
+                                            <DetailRow label="Nomor Rekening:">
+                                                <span className="tabular-nums">
+                                                    {editing.bankAccountNumber || 'xxxx-xxxx-xxxx-xxxx'}
+                                                </span>
+                                            </DetailRow>
+                                            <DetailRow label="Metode Pengiriman:">{shippingLabel || '-'}</DetailRow>
+                                            {!isPickup && editing.trackingNumber && (
+                                                <DetailRow label="No. Resi:">
+                                                    <span className="break-all tabular-nums" dir="ltr">
+                                                        {editing.trackingNumber}
+                                                    </span>
+                                                </DetailRow>
+                                            )}
+                                        </dl>
+
+                                        <dl className="mt-4 space-y-0.5">
+                                            <DetailRow label="Subtotal Pembayaran:">
+                                                <span className="tabular-nums">{formatRupiah(subtotal)}</span>
+                                            </DetailRow>
+                                            <DetailRow label="Voucher Diskon:">
+                                                {editing.voucherDiscount && editing.voucherDiscount > 0 ? (
+                                                    <span className="tabular-nums text-text-error-primary">
+                                                        -{formatRupiah(editing.voucherDiscount)}
+                                                        {editing.voucher?.name ? ` (${editing.voucher.name})` : ''}
+                                                    </span>
+                                                ) : (
+                                                    '0'
+                                                )}
+                                            </DetailRow>
+                                            <DetailRow label="Biaya Pengiriman:">
+                                                <span className="tabular-nums">
+                                                    {editing.ongkir ? formatRupiah(editing.ongkir) : '0'}
+                                                </span>
+                                            </DetailRow>
+                                            <DetailRow label="Fee Admin Pembayaran:">
+                                                <span className="tabular-nums">
+                                                    {editing.adminFee ? formatRupiah(editing.adminFee) : '0'}
+                                                </span>
+                                            </DetailRow>
+                                        </dl>
+
+                                        <dl className="mt-4 border-t border-separator-border pt-3">
+                                            <DetailRow label="Total:" strong>
+                                                <span className="tabular-nums">{formatRupiah(editing.total)}</span>
+                                            </DetailRow>
+                                        </dl>
+                                    </section>
+                                </div>
+
+                                {/* Ubah status */}
+                                <section className="space-y-3 rounded-2xl border border-border-button-default p-4">
+                                    <p className="text-body-medium font-semibold text-text-primary">Ubah Status Pesanan</p>
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                                         {ORDER_TABS.filter((t) => t.key !== 'all').map((t) => (
                                             <button
                                                 key={t.key}
@@ -325,45 +548,41 @@ export function OrdersSection({
                                             </button>
                                         ))}
                                     </div>
+
+                                    {!isPickup && (
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <Input
+                                                label="Nama Kurir"
+                                                placeholder="mis. J&T Express"
+                                                value={courierName}
+                                                onChange={setCourierName}
+                                            />
+                                            <Input
+                                                label="Nomor Resi (opsional)"
+                                                placeholder="Otomatis jika dikosongkan"
+                                                value={trackingNumber}
+                                                onChange={setTrackingNumber}
+                                            />
+                                        </div>
+                                    )}
+                                </section>
+
+                                <div className="flex flex-wrap justify-end gap-2 pb-1">
+                                    <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
+                                        Tutup
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        leadingIcon={nextStatus === 'sent' ? RiTruckLine : RiCheckboxCircleLine}
+                                        disabled={saving}
+                                    >
+                                        {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                                    </Button>
                                 </div>
-
-                                {editing.shipping?.title !== 'Ambil di Toko' && (
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        <Input
-                                            label="Nama Kurir"
-                                            placeholder="mis. J&T Express"
-                                            value={courierName}
-                                            onChange={setCourierName}
-                                        />
-                                        <Input
-                                            label="Nomor Resi (opsional)"
-                                            placeholder="Otomatis jika dikosongkan"
-                                            value={trackingNumber}
-                                            onChange={setTrackingNumber}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex flex-wrap justify-end gap-2 pt-2">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => setEditing(null)}
-                                >
-                                    Batal
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    leadingIcon={nextStatus === 'sent' ? RiTruckLine : RiCheckboxCircleLine}
-                                    disabled={saving}
-                                >
-                                    {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
-                                </Button>
-                            </div>
-                        </form>
-                    )}
+                            </form>
+                        )
+                    })()}
                 </DialogContent>
             </Dialog>
         </div>

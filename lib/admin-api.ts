@@ -70,6 +70,9 @@ export interface AdminOrder extends Order {
     name?: string
     email?: string
     phone?: string
+    bankAccountName?: string
+    bankAccountNumber?: string
+    area?: { id?: string; name?: string; address?: string } | null
 }
 
 export interface AdminVoucher {
@@ -85,6 +88,7 @@ export interface AdminVoucher {
     usedQty: number
     isAutoApply: boolean
     isActive: boolean
+    isDraft: boolean
     startDate?: string
     endDate?: string
 }

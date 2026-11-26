@@ -1,8 +1,10 @@
 "use client"
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { RiAddLine, RiDeleteBinLine, RiEditLine, RiRefreshLine } from '@remixicon/react'
+import { RiAddLine, RiCheckboxCircleLine, RiDeleteBinLine, RiDraftLine, RiEditLine, RiRefreshLine } from '@remixicon/react'
 import { Button } from '@/components/base/buttons/button'
+import { Checkbox } from '@/components/base/checkbox/checkbox'
+import { BulkActionBar, ConfirmDialog, type BulkResult } from '@/components/admin/bulk-actions'
 import { Chip } from '@/components/base/badges/chip'
 import { Input } from '@/components/base/input/input'
 import { Skeleton } from '@/components/base/skeleton/skeleton'
@@ -21,6 +23,7 @@ const EMPTY_FORM = {
     qty: '100',
     isAutoApply: false,
     isActive: true,
+    isDraft: false,
 }
 
 export function VouchersSection({
@@ -39,6 +42,47 @@ export function VouchersSection({
     const [editingId, setEditingId] = useState<string | null>(null)
     const [form, setForm] = useState(EMPTY_FORM)
     const [saving, setSaving] = useState(false)
+
+    // Aksi massal
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [bulkBusy, setBulkBusy] = useState(false)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+
+    const allSelected = vouchers.length > 0 && vouchers.every((v) => selected.has(v.id))
+    const someSelected = selected.size > 0 && !allSelected
+
+    const toggleAll = (checked: boolean) =>
+        setSelected(checked ? new Set(vouchers.map((v) => v.id)) : new Set())
+
+    const toggleOne = (id: string, checked: boolean) =>
+        setSelected((prev) => {
+            const next = new Set(prev)
+            if (checked) next.add(id)
+            else next.delete(id)
+            return next
+        })
+
+    const runBulk = async (action: 'delete' | 'draft' | 'publish', doneTitle: string) => {
+        setBulkBusy(true)
+        try {
+            const res = await adminFetch<BulkResult>('/admin/vouchers/bulk', {
+                method: 'POST',
+                body: JSON.stringify({ action, ids: [...selected] }),
+            })
+            toast({ title: `${doneTitle}: ${res.affected} voucher` })
+            setSelected(new Set())
+            setConfirmDelete(false)
+            load()
+        } catch (err) {
+            toast({
+                title: 'Aksi massal gagal',
+                description: err instanceof Error ? err.message : 'Terjadi kesalahan',
+                variant: 'destructive',
+            })
+        } finally {
+            setBulkBusy(false)
+        }
+    }
 
     useEffect(() => {
         if (startInCreateMode) {
@@ -87,6 +131,7 @@ export function VouchersSection({
             qty: String(v.qty),
             isAutoApply: v.isAutoApply,
             isActive: v.isActive,
+            isDraft: v.isDraft,
         })
         setModalOpen(true)
     }
@@ -106,6 +151,7 @@ export function VouchersSection({
                 qty: Number(form.qty) || 100,
                 isAutoApply: form.isAutoApply,
                 isActive: form.isActive,
+                isDraft: form.isDraft,
             }
             if (editingId) {
                 await adminFetch(`/admin/vouchers/${editingId}`, {
@@ -172,6 +218,46 @@ export function VouchersSection({
                 </div>
             </div>
 
+            <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+                <Button
+                    variant="secondary"
+                    size="small"
+                    leadingIcon={RiDraftLine}
+                    disabled={bulkBusy}
+                    onClick={() => runBulk('draft', 'Dijadikan draft')}
+                >
+                    Jadikan draft
+                </Button>
+                <Button
+                    variant="primary"
+                    size="small"
+                    leadingIcon={RiCheckboxCircleLine}
+                    disabled={bulkBusy}
+                    onClick={() => runBulk('publish', 'Diterbitkan')}
+                >
+                    Terbitkan
+                </Button>
+                <Button
+                    variant="danger"
+                    size="small"
+                    leadingIcon={RiDeleteBinLine}
+                    disabled={bulkBusy}
+                    onClick={() => setConfirmDelete(true)}
+                >
+                    Hapus
+                </Button>
+            </BulkActionBar>
+
+            <ConfirmDialog
+                open={confirmDelete}
+                title={`Hapus ${selected.size} voucher?`}
+                description="Voucher yang dipilih dihapus permanen dan tidak bisa dikembalikan. Gunakan 'Jadikan draft' bila hanya ingin menyembunyikannya dari checkout."
+                confirmLabel="Ya, hapus"
+                loading={bulkBusy}
+                onConfirm={() => runBulk('delete', 'Dihapus')}
+                onCancel={() => setConfirmDelete(false)}
+            />
+
             <section className="overflow-hidden rounded-3xl border border-border-button-default bg-background-full">
                 {loading ? (
                     <div className="space-y-3 p-6">
@@ -186,7 +272,15 @@ export function VouchersSection({
                         <table className="w-full text-start text-body-regular">
                             <thead>
                                 <tr className="border-b border-separator-border text-caption-1-semibold text-text-tertiary">
-                                    <th className="px-5 py-3.5 text-start">Kode & Deskripsi</th>
+                                    <th className="w-10 ps-5 py-3.5 text-start">
+                                        <Checkbox
+                                            aria-label="Pilih semua voucher"
+                                            isSelected={allSelected}
+                                            isIndeterminate={someSelected}
+                                            onChange={toggleAll}
+                                        />
+                                    </th>
+                                    <th className="px-4 py-3.5 text-start">Kode & Deskripsi</th>
                                     <th className="px-4 py-3.5 text-start">Tipe & Diskon</th>
                                     <th className="px-4 py-3.5 text-start">Syarat</th>
                                     <th className="px-4 py-3.5 text-center">Kuota</th>
@@ -197,7 +291,14 @@ export function VouchersSection({
                             <tbody className="divide-y divide-separator-border">
                                 {vouchers.map((v) => (
                                     <tr key={v.id} className="hover:bg-background-secondary-hover/60">
-                                        <td className="px-5 py-3.5">
+                                        <td className="w-10 ps-5 py-3.5">
+                                            <Checkbox
+                                                aria-label={`Pilih voucher ${v.name}`}
+                                                isSelected={selected.has(v.id)}
+                                                onChange={(checked) => toggleOne(v.id, checked)}
+                                            />
+                                        </td>
+                                        <td className="px-4 py-3.5">
                                             <p className="font-semibold text-text-primary">{v.name}</p>
                                             <p className="text-caption-1-regular text-text-secondary">{v.description}</p>
                                         </td>
@@ -219,9 +320,13 @@ export function VouchersSection({
                                         </td>
                                         <td className="px-4 py-3.5 text-center">
                                             <button type="button" onClick={() => toggleActive(v)}>
-                                                <Chip variant="caption" color={v.isActive ? 'lime' : 'neutral'}>
-                                                    {v.isActive ? 'Aktif' : 'Nonaktif'}
-                                                </Chip>
+                                                {v.isDraft ? (
+                                                    <Chip variant="caption" color="yellow">Draft</Chip>
+                                                ) : (
+                                                    <Chip variant="caption" color={v.isActive ? 'lime' : 'neutral'}>
+                                                        {v.isActive ? 'Aktif' : 'Nonaktif'}
+                                                    </Chip>
+                                                )}
                                             </button>
                                         </td>
                                         <td className="px-5 py-3.5 text-end">
@@ -349,6 +454,15 @@ export function VouchersSection({
                                 onChange={(e) => setForm((f) => ({ ...f, isAutoApply: e.target.checked }))}
                             />
                             Terapkan otomatis di checkout jika memenuhi syarat
+                        </label>
+
+                        <label className="flex items-center gap-2 text-body-regular text-text-primary">
+                            <input
+                                type="checkbox"
+                                checked={form.isDraft}
+                                onChange={(e) => setForm((f) => ({ ...f, isDraft: e.target.checked }))}
+                            />
+                            Simpan sebagai draft (belum tampil di checkout)
                         </label>
 
                         <div className="flex justify-end gap-2 pt-2">
